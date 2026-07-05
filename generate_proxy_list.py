@@ -36,9 +36,31 @@ class ProxyListScraper:
                 cells = row.find_all('td')
                 if len(cells) >= 4:  # 需要至少4列：协议、IP、端口、位置
                     protocol = cells[0].text.strip()
-                    ip = cells[1].text.strip()
                     port = cells[2].text.strip()
+                    
+                    # 提前获取位置信息，用来判断是不是家宽
                     location = cells[3].text.strip() if len(cells) > 3 else "未知"
+                    
+                    # --- 核心抗混淆逻辑 ---
+                    ip_cell = cells[1]
+                    
+                    if "家宽" in location:
+                        # 如果是家宽，直接提取，保留原本的 X
+                        ip = ip_cell.text.strip()
+                    else:
+                        # 如果是机房，必须进行深度清洗，剔除隐藏的干扰标签
+                        for hidden_tag in ip_cell.find_all(['span', 'div', 'i', 'b', 'font']):
+                            style = hidden_tag.get('style', '').lower()
+                            class_list = ''.join(hidden_tag.get('class', [])).lower()
+                            
+                            # 如果标签带有隐藏样式，直接从内存中销毁它
+                            if 'none' in style or 'hidden' in style or 'hide' in class_list:
+                                hidden_tag.decompose()
+                                
+                        # 清洗干净后，再提取纯文本
+                        ip = ip_cell.get_text(strip=True)
+                        ip = ip.replace(' ', '') # 容错：去除拼接时可能产生的空格
+                    # ----------------------
                     
                     # 清理位置信息中的多余文本
                     location = location.replace('复制', '').replace('已复制', '').replace('已', '').strip()
