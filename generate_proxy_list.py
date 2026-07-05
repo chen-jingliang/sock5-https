@@ -1,32 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import requests
-from bs4 import BeautifulSoup
-import time
+import sys
 from datetime import datetime
+from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
 class ProxyListScraper:
     def __init__(self):
         self.url = "https://proxy-socks5.com/proxy_list"
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
     
     def scrape_proxy_list(self):
-        """抓取代理列表"""
+        """使用无头浏览器抓取动态渲染后的代理列表"""
+        print(f"启动无头浏览器抓取: {self.url}")
+        
         try:
-            print(f"正在抓取代理列表: {self.url}")
-            response = requests.get(self.url, headers=self.headers, timeout=30)
-            response.raise_for_status()
-            response.encoding = 'utf-8'
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # 查找包含代理数据的表格
+            with sync_playwright() as p:
+                # 启动隐形 Chromium 浏览器
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                
+                # 伪装真实用户的请求头
+                page.set_extra_http_headers({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                })
+                
+                # 访问网页并等待网络空闲，确保基础 JS 文件已下载完毕
+                print("正在加载网页并等待 JavaScript 解密...")
+                page.goto(self.url, wait_until="networkidle", timeout=30000)
+                
+                # 额外强制等待 3 秒，留出足够的时间让网页完成从 X 到真实 IP 的动态渲染
+                page.wait_for_timeout(3000)
+                
+                # 获取经过浏览器完整渲染后的 DOM 源码（此时机房的 X 已被替换为真 IP）
+                html_content = page.content()
+                browser.close()
+                
+            # 交给 BeautifulSoup 进行结构化提取
+            soup = BeautifulSoup(html_content, 'html.parser')
             table = soup.find('table')
+            
             if not table:
-                print("未找到代理数据表格")
+                print("未找到代理数据表格，可能触发了网站的真人验证防爬策略")
                 return []
             
             proxies = []
@@ -34,86 +49,62 @@ class ProxyListScraper:
             
             for row in rows:
                 cells = row.find_all('td')
-                if len(cells) >= 4:  # 需要至少4列：协议、IP、端口、位置
+                if len(cells) >= 4:
                     protocol = cells[0].text.strip()
                     port = cells[2].text.strip()
-                    
-                    # 提前获取位置信息，用来判断是不是家宽
                     location = cells[3].text.strip() if len(cells) > 3 else "未知"
                     
-                    # --- 核心抗混淆逻辑 ---
                     ip_cell = cells[1]
                     
-                    if "家宽" in location:
-                        # 如果是家宽，直接提取，保留原本的 X
-                        ip = ip_cell.text.strip()
-                    else:
-                        # 如果是机房，必须进行深度清洗，剔除隐藏的干扰标签
-                        for hidden_tag in ip_cell.find_all(['span', 'div', 'i', 'b', 'font']):
-                            style = hidden_tag.get('style', '').lower()
-                            class_list = ''.join(hidden_tag.get('class', [])).lower()
+                    # 即使有了浏览器加持，依然保留双保险：剔除残留的不可见干扰标签
+                    for hidden_tag in ip_cell.find_all(['span', 'div', 'i', 'b', 'font']):
+                        style = hidden_tag.get('style', '').lower()
+                        class_list = ''.join(hidden_tag.get('class', [])).lower()
+                        if 'none' in style or 'hidden' in style or 'hide' in class_list:
+                            hidden_tag.decompose()
                             
-                            # 如果标签带有隐藏样式，直接从内存中销毁它
-                            if 'none' in style or 'hidden' in style or 'hide' in class_list:
-                                hidden_tag.decompose()
-                                
-                        # 清洗干净后，再提取纯文本
-                        ip = ip_cell.get_text(strip=True)
-                        ip = ip.replace(' ', '') # 容错：去除拼接时可能产生的空格
-                    # ----------------------
+                    ip = ip_cell.get_text(strip=True).replace(' ', '')
                     
-                    # 清理位置信息中的多余文本
+                    # 深度清洗位置信息
                     location = location.replace('复制', '').replace('已复制', '').replace('已', '').strip()
-                    # 移除多余的空行、换行符和多余的空格
                     location = ' '.join(location.split())
                     
                     if protocol and ip and port:
-                        # 使用标准代理格式：协议://ip:port [地址位置]
                         proxy = f"{protocol}://{ip}:{port} [{location}]"
                         proxies.append(proxy)
             
             print(f"成功抓取到 {len(proxies)} 个代理")
             return proxies
             
-        except requests.RequestException as e:
-            print(f"网络请求错误: {e}")
-            return []
         except Exception as e:
-            print(f"抓取错误: {e}")
+            print(f"浏览器渲染抓取出现严重错误: {e}")
             return []
-    
+
     def save_to_file(self, proxies, filename='proxy.txt'):
         """保存代理列表到文件"""
         try:
             with open(filename, 'w', encoding='utf-8') as f:
-                # 写入时间戳
                 f.write(f"# 代理列表更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"# 总计: {len(proxies)} 个代理\n\n")
-                
-                # 写入代理列表 (标准格式：协议://ip:port [地址位置])
                 for proxy in proxies:
                     f.write(f"{proxy}\n")
-            
             print(f"代理列表已保存到 {filename}")
             return True
-            
         except Exception as e:
             print(f"保存文件错误: {e}")
             return False
 
 def main():
-    """主函数"""
     scraper = ProxyListScraper()
-    
-    # 抓取代理列表
     proxies = scraper.scrape_proxy_list()
     
+    # 强制校验：如果没抓到数据，退出码置为 1，中断 Action 避免提交空文件
     if proxies:
-        # 保存到文件
         scraper.save_to_file(proxies)
         print("代理列表抓取完成！")
     else:
-        print("未能获取到代理数据")
+        print("错误：未能获取到代理数据")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
