@@ -8,7 +8,7 @@ from datetime import datetime
 
 class ProxyListScraper:
     def __init__(self):
-        self.url = "https://tomcat1235.nyc.mn/proxy_list"
+        self.url = "https://proxy-socks5.com/proxy_list"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
