@@ -10,9 +10,8 @@ permissions:
 
 on:
   schedule:
-    # 每天早上7点和晚上7点更新代理列表
-    - cron: '0 23 * * *'  # 北京时间早上7点 (UTC 23:00)
-    - cron: '0 11 * * *'  # 北京时间晚上7点 (UTC 11:00)
+    # 每天整点时更新，即每小时更新一次
+    - cron: '0 * * * *'
   workflow_dispatch:
     # 允许手动触发
 
