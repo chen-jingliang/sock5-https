@@ -1,1 +1,1 @@
-JUST TEST！
+TEST
