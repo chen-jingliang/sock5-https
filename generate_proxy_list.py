@@ -104,7 +104,6 @@ class ProxyListScraper:
             return False
 
 def main():
-    # 通过 os.environ 从 GitHub Actions 的 Secrets 中安全获取 Cookie
     my_cookie = os.environ.get("PROXY_SITE_COOKIE")
     
     if not my_cookie:
