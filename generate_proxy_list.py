@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -10,8 +11,9 @@ class ProxyListScraper:
     def __init__(self, cookie_string=""):
         self.url = "https://proxy-socks5.com/proxy_list"
         self.session = requests.Session()
+        # 设置请求头，携带传入的 Cookie 保持登录状态
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Cookie': cookie_string
         })
     
@@ -26,7 +28,7 @@ class ProxyListScraper:
             soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table')
             if not table:
-                print("未找到代理数据表格")
+                print("未找到代理数据表格，请检查 Cookie 是否过期或页面结构是否改变")
                 return []
             
             proxies = []
@@ -35,11 +37,11 @@ class ProxyListScraper:
             for row in rows:
                 cells = row.find_all('td')
                 if len(cells) >= 4:
-                    # 1. 提取协议：只匹配 socks5, http 或 https，丢弃多余字符
+                    # 1. 提取协议：只匹配 socks5, http 或 https
                     protocol_match = re.search(r'(socks5|https|http)', cells[0].text, re.IGNORECASE)
                     protocol = protocol_match.group(1).lower() if protocol_match else ""
                     
-                    # 2. 提取 IP：支持标准 IP 格式及带 X 的脱敏格式（如 23.254.X.240）
+                    # 2. 提取 IP：支持标准 IP 格式及带 X 的脱敏格式
                     ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.(?:\d{1,3}|X)\.\d{1,3})', cells[1].text)
                     ip = ip_match.group(1) if ip_match else ""
                     
@@ -55,21 +57,17 @@ class ProxyListScraper:
                         raw_location = ' '.join(raw_location.split())
                         
                         # 4. 精准分离“入库时间”和“地理位置”
-                        # 从原始字符串中提取类似 07-13 15:41 的时间
                         time_match = re.search(r'入库.*?(\d{2}-\d{2}\s+\d{2}:\d{2})', raw_location)
                         if time_match:
                             in_time = time_match.group(1)
-                            # 将入库时间及其后面的所有字符从地理位置文本中抹除
                             location = re.sub(r'入库.*', '', raw_location).strip()
                         else:
                             in_time = "未知"
                             location = raw_location
                             
-                        # 5. 组装代理链接并按参考图对齐
+                        # 5. 组装代理链接并按原作者排版对齐
                         url_str = f"{protocol}://{ip}:{port}"
-                        
-                        # ljust(36) 让左侧的代理链接统一占据 36 个字符的宽度，不足的部分用空格补齐。
-                        # 这完全模仿了 SCR-20260713-ospe.jpg 中整齐的垂直对齐效果。
+                        # ljust(36) 让左侧的代理链接统一占据 36 个字符宽度实现对齐
                         proxy_line = f"{url_str.ljust(36)}入库时间：{in_time}  {location}"
                         
                         proxies.append(proxy_line)
@@ -106,9 +104,13 @@ class ProxyListScraper:
             return False
 
 def main():
-    # 记得替换为你的有效 Cookie 字符串以获取未脱敏数据（家宽除外）
-    my_cookie = "session=eyJwb3J0IjozMTI0OSwidXNlcm5hbWUiOiJtb29vb29zcyIsInV1aWQiOiI5MjA3YjgzMi1lNmFjLTQ1N2QtODkwZS1kN2FhMzQ0ZjU3ZDEifQ.alSdAQ.Oz1lKlfQgc2closhId5yGFquuVA"
+    # 通过 os.environ 从 GitHub Actions 的 Secrets 中安全获取 Cookie
+    my_cookie = os.environ.get("PROXY_SITE_COOKIE")
     
+    if not my_cookie:
+        print("错误: 未找到 Cookie！请检查是否在 GitHub Secrets 或环境变量中设置了 PROXY_SITE_COOKIE。")
+        return
+        
     scraper = ProxyListScraper(cookie_string=my_cookie)
     proxies = scraper.scrape_proxy_list()
     
