@@ -11,7 +11,7 @@ class ProxyListScraper:
     def __init__(self, cookie_string=""):
         self.url = "https://proxy-socks5.com/proxy_list"
         self.session = requests.Session()
-        # 设置请求头，携带传入的 Cookie 保持登录状态
+        # 设置请求头，携带传入的Cookie保持登录状态
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Cookie': cookie_string
