@@ -41,7 +41,7 @@ class ProxyListScraper:
                     protocol_match = re.search(r'(socks5|https|http)', cells[0].text, re.IGNORECASE)
                     protocol = protocol_match.group(1).lower() if protocol_match else ""
                     
-                    # 2. 提取 IP：支持标准 IP 格式及带 X 的脱敏格式
+                    # 2. 提取 IP：支持标准 IP 格式及带X的脱敏格式
                     ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.(?:\d{1,3}|X)\.\d{1,3})', cells[1].text)
                     ip = ip_match.group(1) if ip_match else ""
                     
