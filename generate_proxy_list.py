@@ -100,13 +100,15 @@ class ProxyListScraper:
             with open(filename, 'w', encoding='utf-8') as f:
                 # 获取 UTC 时间并强制加上 8 小时，转换为北京时间
                 beijing_time = datetime.utcnow() + timedelta(hours=8)
-                f.write(f"# 代理列表更新时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)\n")                
-                f.write(f"# 总计: {len(proxies)} 个代理\n")
                 
-                # 如果列表为空，在文件中直观标注 Token 状态，方便查阅
+                # 严格按要求：只保留时间、总计，并空一行
+                f.write(f"# 代理列表更新时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)\n")
+                f.write(f"# 总计: {len(proxies)} 个代理\n\n")
+                
+                # 列表为空时，保留英文提示说明 Token 过期
                 if not proxies:
-                    f.write("# Token expired or no valid proxies found.\n")
-                    f.write("# Please update PROXY_SITE_COOKIE in GitHub Secrets.\n")
+                    f.write("Token expired or no valid proxies found.\n")
+                    f.write("Please update PROXY_SITE_COOKIE in GitHub Secrets.\n")
                 
                 for proxy in proxies:
                     f.write(f"{proxy}\n")
