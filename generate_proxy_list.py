@@ -12,7 +12,6 @@ class ProxyListScraper:
     def __init__(self, cookie_string=""):
         self.url = "https://proxy-socks5.com/proxy_list"
         self.session = requests.Session()
-        # 优化 1：更新为现代浏览器请求头，降低被拦截概率
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -25,13 +24,20 @@ class ProxyListScraper:
         try:
             print(f"正在抓取代理列表: {self.url}")
             response = self.session.get(self.url, timeout=30)
-            response.raise_for_status()
             response.encoding = 'utf-8'
+            
+            # 1. 页面级拦截：检测是否有英文的 Token 过期或无效提示
+            page_text_lower = response.text.lower()
+            if "expired" in page_text_lower or "invalid" in page_text_lower or "unauthorized" in page_text_lower:
+                print("Token expired. (Detected expiration keywords in page)")
+                return []
+                
+            response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
             table = soup.find('table')
             if not table:
-                print("未找到代理数据表格，请检查 Cookie 是否过期或页面结构是否改变")
+                print("未找到代理数据表格，页面结构可能改变，或 Cookie 权限不足。")
                 return []
             
             proxies = []
@@ -40,19 +46,13 @@ class ProxyListScraper:
             for row in rows:
                 cells = row.find_all('td')
                 if len(cells) >= 4:
-                    # 1. 提取协议
                     protocol_match = re.search(r'(socks5|https|http)', cells[0].text, re.IGNORECASE)
                     protocol = protocol_match.group(1).lower() if protocol_match else ""
                     
-                    # 优化 2：严格过滤带 X 的脱敏 IP
-                    ip_text = cells[1].text.strip()
-                    if 'X' in ip_text or 'x' in ip_text:
-                        continue
-                    
-                    ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', ip_text)
+                    # 兼容提取包含 X 或 x 的脱敏 IP
+                    ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.(?:\d{1,3}|[Xx]+)\.\d{1,3})', cells[1].text)
                     ip = ip_match.group(1) if ip_match else ""
                     
-                    # 3. 提取端口
                     port_match = re.search(r'(\d{2,5})', cells[2].text)
                     port = port_match.group(1) if port_match else ""
                     
@@ -75,7 +75,16 @@ class ProxyListScraper:
                         
                         proxies.append(proxy_line)
             
-            print(f"成功抓取到 {len(proxies)} 个未脱敏代理")
+            # 2. 数据级拦截：智能判定是否 100% 都是带 X 的脱敏 IP
+            if proxies:
+                x_count = sum(1 for p in proxies if 'X' in p or 'x' in p)
+                
+                # 如果所有提取到的节点全都带有 X，说明账号已被降级为访客权限
+                if x_count == len(proxies):
+                    print("Token expired. (All proxy IPs are masked with 'X').")
+                    return []
+            
+            print(f"成功抓取到 {len(proxies)} 个代理（其中包含 {x_count if proxies else 0} 个带 X 节点）")
             return proxies
             
         except requests.RequestException as e:
@@ -94,6 +103,11 @@ class ProxyListScraper:
                 f.write("# 实时抓取于免费公共代理池: https://proxy-socks5.com\n")
                 f.write("# 最好用的代理资源\n\n")
                 
+                # 如果列表为空，在文件中直观标注 Token 状态，方便查阅
+                if not proxies:
+                    f.write("# Token expired or no valid proxies found.\n")
+                    f.write("# Please update PROXY_SITE_COOKIE in GitHub Secrets.\n")
+                
                 for proxy in proxies:
                     f.write(f"{proxy}\n")
             
@@ -108,19 +122,14 @@ def main():
     my_cookie = os.environ.get("PROXY_SITE_COOKIE")
     
     if not my_cookie:
-        print("错误: 未找到 Cookie！请检查是否在 GitHub Secrets 或环境变量中设置了 PROXY_SITE_COOKIE。")
-        # 优化 3：抛出系统错误码，让 Action 捕获失败状态
+        print("Error: Cookie not found! Please check PROXY_SITE_COOKIE in GitHub Secrets.")
         sys.exit(1)
         
     scraper = ProxyListScraper(cookie_string=my_cookie)
     proxies = scraper.scrape_proxy_list()
     
-    # 优化 4：移除 if proxies 判断。即使为空，也强制生成 proxy.txt
-    # 防止 GitHub Actions 后续步骤因找不到文件而报 exit 1 导致整个流程卡死
+    # 无论抓取结果如何，都强制生成文件，保障 GitHub Actions 顺利通过 [ -f proxy.txt ] 检测
     scraper.save_to_file(proxies)
-    
-    if not proxies:
-        print("警告: 抓取结果为空，可能 Token 已失效或全是脱敏 IP。已生成带头部的空文件以维持 Action 运行。")
 
 if __name__ == "__main__":
     main()
