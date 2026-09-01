@@ -5,7 +5,7 @@ import os
 import sys
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 class ProxyListScraper:
@@ -98,7 +98,10 @@ class ProxyListScraper:
         """保存代理列表到文件"""
         try:
             with open(filename, 'w', encoding='utf-8') as f:
-                f.write(f"# 代理列表更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                # 获取 UTC 时间并强制加上 8 小时，转换为北京时间
+                beijing_time = datetime.utcnow() + timedelta(hours=8)
+                f.write(f"# 代理列表更新时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)\n")
+                
                 f.write(f"# 总计: {len(proxies)} 个代理\n")
                 f.write("# 实时抓取于免费公共代理池: https://proxy-socks5.com\n")
                 f.write("# 最好用的代理资源\n\n")
