@@ -100,11 +100,8 @@ class ProxyListScraper:
             with open(filename, 'w', encoding='utf-8') as f:
                 # 获取 UTC 时间并强制加上 8 小时，转换为北京时间
                 beijing_time = datetime.utcnow() + timedelta(hours=8)
-                f.write(f"# 代理列表更新时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)\n")
-                
+                f.write(f"# 代理列表更新时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)\n")                
                 f.write(f"# 总计: {len(proxies)} 个代理\n")
-                f.write("# 实时抓取于免费公共代理池: https://proxy-socks5.com\n")
-                f.write("# 最好用的代理资源\n\n")
                 
                 # 如果列表为空，在文件中直观标注 Token 状态，方便查阅
                 if not proxies:
